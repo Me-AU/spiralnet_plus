@@ -1,6 +1,6 @@
 classification/
 __pycache__/
-**/out/
+# **/out/
 INPUT.md
 *.pyc
 
