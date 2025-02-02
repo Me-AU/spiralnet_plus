@@ -8,8 +8,8 @@ import torch.backends.cudnn as cudnn
 import torch_geometric.transforms as T
 from psbody.mesh import Mesh
 
+
 from reconstruction import AE, run, eval_error
-from datasets import MeshData
 from utils import utils, writer, DataLoader, mesh_sampling
 
 parser = argparse.ArgumentParser(description='mesh autoencoder')
@@ -66,14 +66,27 @@ cudnn.deterministic = True
 
 # load dataset
 template_fp = osp.join(args.data_fp, 'template', 'template.obj')
-meshdata = MeshData(args.data_fp,
-                    template_fp,
-                    split=args.split,
-                    test_exp=args.test_exp)
-train_loader = DataLoader(meshdata.train_dataset,
-                          batch_size=args.batch_size,
-                          shuffle=True)
-test_loader = DataLoader(meshdata.test_dataset, batch_size=args.batch_size)
+
+if args.dataset == 'CoMA':
+    from datasets import MeshData
+    meshdata = MeshData(args.data_fp,
+                        template_fp,
+                        split=args.split,
+                        test_exp=args.test_exp)
+    train_loader = DataLoader(meshdata.train_dataset,
+                            batch_size=args.batch_size,
+                            shuffle=True)
+    test_loader = DataLoader(meshdata.test_dataset, batch_size=args.batch_size)
+
+elif args.dataset == '3DFN':
+    from datasets import ThreeDFN
+    # Load 3DFN dataset (automatically loads train/test split)
+    train_dataset = ThreeDFN(root=args.data_fp, train=True, transform=T.NormalizeScale())
+    test_dataset = ThreeDFN(root=args.data_fp, train=False, transform=T.NormalizeScale())
+
+    # Create DataLoaders
+    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
+    test_loader = DataLoader(test_dataset, batch_size=args.batch_size)
 
 # generate/load transform matrices
 transform_fp = osp.join(args.data_fp, 'transform.pkl')
@@ -129,4 +142,9 @@ scheduler = torch.optim.lr_scheduler.StepLR(optimizer,
 
 run(model, train_loader, test_loader, args.epochs, optimizer, scheduler,
     writer, device)
-eval_error(model, test_loader, device, meshdata, args.out_dir)
+
+if args.dataset == 'CoMA':
+    eval_error(model, test_loader, device, meshdata, args.out_dir)
+elif args.dataset == '3DFN':
+    eval_error(model, test_loader, device, test_dataset, args.out_dir)
+
