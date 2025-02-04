@@ -203,3 +203,23 @@ output_dir = osp.join(args.data_fp, 'predicted')  # Output directory to save the
 
 # Run inference and save predictions
 infer_and_save(test_loader, model, device, test_dataset, output_dir, template_fp)
+
+def get_latent_embeddings(test_loader, model, device, data_fp):
+    model.eval()
+    path = osp.join(data_fp, 'latent_embeddings.pt')
+    latent_embeddings = []
+    with torch.no_grad():
+        for data in test_loader:
+            data = data.to(device)
+            latent = model.encoder(data.x)  # Extract latent embeddings
+            latent_embeddings.append(latent)
+    
+    # Convert list to tensor
+    latent_embeddings = torch.cat(latent_embeddings, dim=0)
+    
+    # Save the embeddings to a file
+    torch.save(latent_embeddings, path)
+
+    return latent_embeddings
+
+latent_embeddings = get_latent_embeddings(test_loader, model, device, args.data_fp)
