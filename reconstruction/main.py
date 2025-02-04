@@ -147,3 +147,59 @@ if args.dataset == 'CoMA':
     eval_error(model, test_loader, device, meshdata, args.out_dir)
 elif args.dataset == 'ThreeDFN':
     eval_error(model, test_loader, device, test_dataset, args.out_dir)
+
+def reverse_preprocessing(data, dataset):
+    """
+    Reverse normalization using dataset's mean and std
+    """
+    return (data * dataset.std) + dataset.mean
+
+def save_predictions(predictions, output_dir, template_mesh_path):
+    """
+    Saves the model's predictions as mesh files (.obj). Uses faces from the template mesh.
+    
+    Parameters:
+    - predictions (list of tensors): The model predictions.
+    - output_dir (str): Directory where the output .obj files will be saved.
+    - template_mesh_path (str): Path to the template mesh to extract faces.
+    """
+    # Load template mesh to get faces
+    template_mesh = Mesh(filename=template_mesh_path)
+    faces = template_mesh.f  # Faces from the template mesh
+    
+    # Save each prediction as a mesh
+    for i, pred in enumerate(predictions):
+        # Convert model output to Mesh format using the template faces
+        mesh = Mesh(v=pred.cpu().numpy(), f=faces)  # Use faces from template mesh
+        mesh.write_obj(os.path.join(output_dir, f"pred_{i}.obj"))
+
+def infer_and_save(test_loader, model, device, dataset, output_dir, template_mesh_path):
+    """
+    Run inference on the test dataset and save the predictions as .obj files.
+
+    Parameters:
+    - test_loader (DataLoader): DataLoader for the test set.
+    - model (torch.nn.Module): The trained model for inference.
+    - device (torch.device): Device to run the inference on.
+    - dataset (InMemoryDataset): The dataset to reverse the preprocessing (mean and std).
+    - output_dir (str): Directory to save the output mesh files.
+    - template_mesh_path (str): Path to the template mesh to extract faces.
+    """
+    model.eval()
+    predictions = []
+    
+    # Run inference
+    with torch.no_grad():
+        for data in test_loader:
+            data = data.to(device)  # Move data to the correct device
+            pred = model(data.x)    # Forward pass to get model predictions
+            pred = reverse_preprocessing(pred, dataset)  # Reverse preprocessing
+            predictions.append(pred)  # Append prediction
+    
+    # Save predictions as meshes
+    save_predictions(predictions, output_dir, template_mesh_path)
+
+output_dir = osp.join(args.data_fp, 'predicted')  # Output directory to save the predictions
+
+# Run inference and save predictions
+infer_and_save(test_loader, model, device, test_dataset, output_dir, template_fp)
