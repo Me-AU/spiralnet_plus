@@ -2,8 +2,16 @@ import os
 import os.path as osp
 import shutil
 import torch
-from torch_geometric.data import InMemoryDataset
-from utils.read import read_mesh  
+from torch_geometric.data import InMemoryDataset, Data
+import trimesh
+
+def read_mesh(file_path):
+    mesh = trimesh.load_mesh(file_path)
+    data = Data()
+    data.x = torch.tensor(mesh.vertices, dtype=torch.float)
+    data.pos = data.x.clone()
+    data.face = torch.tensor(mesh.faces, dtype=torch.long)
+    return data
 
 class ThreeDFN(InMemoryDataset):
     def __init__(self, root, train=True, transform=None, pre_transform=None, pre_filter=None):

@@ -78,7 +78,7 @@ if args.dataset == 'CoMA':
                             shuffle=True)
     test_loader = DataLoader(meshdata.test_dataset, batch_size=args.batch_size)
 
-elif args.dataset == '3DFN':
+elif args.dataset == 'ThreeDFN':
     from datasets import ThreeDFN
     # Load 3DFN dataset (automatically loads train/test split)
     train_dataset = ThreeDFN(root=args.data_fp, train=True, transform=T.NormalizeScale())
@@ -145,6 +145,5 @@ run(model, train_loader, test_loader, args.epochs, optimizer, scheduler,
 
 if args.dataset == 'CoMA':
     eval_error(model, test_loader, device, meshdata, args.out_dir)
-elif args.dataset == '3DFN':
+elif args.dataset == 'ThreeDFN':
     eval_error(model, test_loader, device, test_dataset, args.out_dir)
-
