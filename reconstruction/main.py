@@ -152,30 +152,15 @@ def reverse_preprocessing(data, dataset):
     """
     Reverse normalization using dataset's mean and std
     """
-    return (data * dataset.std) + dataset.mean
-
-def save_predictions(predictions, output_dir, template_mesh_path):
-    """
-    Saves the model's predictions as mesh files (.obj). Uses faces from the template mesh.
+    device = data.device  # Get the device of `data`
+    mean = dataset.mean.to(device)  # Move mean to same device
+    std = dataset.std.to(device)  # Move std to same device
     
-    Parameters:
-    - predictions (list of tensors): The model predictions.
-    - output_dir (str): Directory where the output .obj files will be saved.
-    - template_mesh_path (str): Path to the template mesh to extract faces.
-    """
-    # Load template mesh to get faces
-    template_mesh = Mesh(filename=template_mesh_path)
-    faces = template_mesh.f  # Faces from the template mesh
-    
-    # Save each prediction as a mesh
-    for i, pred in enumerate(predictions):
-        # Convert model output to Mesh format using the template faces
-        mesh = Mesh(v=pred.cpu().numpy(), f=faces)  # Use faces from template mesh
-        mesh.write_obj(os.path.join(output_dir, f"pred_{i}.obj"))
+    return (data * std) + mean  # Now all tensors are on the same device
 
 def infer_and_save(test_loader, model, device, dataset, output_dir, template_mesh_path):
     """
-    Run inference on the test dataset and save the predictions as .obj files.
+    Run inference on the test dataset and save predictions as .obj files using input file names.
 
     Parameters:
     - test_loader (DataLoader): DataLoader for the test set.
@@ -188,16 +173,41 @@ def infer_and_save(test_loader, model, device, dataset, output_dir, template_mes
     model.eval()
     predictions = []
     
+    os.makedirs(output_dir, exist_ok=True)
+    
     # Run inference
     with torch.no_grad():
         for data in test_loader:
             data = data.to(device)  # Move data to the correct device
             pred = model(data.x)    # Forward pass to get model predictions
-            pred = reverse_preprocessing(pred, dataset)  # Reverse preprocessing
-            predictions.append(pred)  # Append prediction
+            # pred = reverse_preprocessing(pred, dataset)  # Reverse preprocessing
+
+            # Loop through each element in the batch and save individual predictions
+            for i, filename in enumerate(data.filename):  # data.filename is a list of filenames in the batch
+                pred_single = pred[i]  # Get the prediction for this element in the batch
+                predictions.append((pred_single, filename))  # Save with corresponding filename
     
     # Save predictions as meshes
     save_predictions(predictions, output_dir, template_mesh_path)
+
+def save_predictions(predictions, output_dir, template_mesh_path):
+    """
+    Saves the model's predictions as mesh files (.obj) using input file names.
+
+    Parameters:
+    - predictions (list of tuples): Each tuple contains (tensor prediction, input filename).
+    - output_dir (str): Directory to save the output .obj files.
+    - template_mesh_path (str): Path to the template mesh to extract faces.
+    """
+    template_mesh = Mesh(filename=template_mesh_path)  # Load template mesh
+
+    for pred, filename in predictions:
+        pred_np = pred.detach().cpu().numpy()  # Ensure it's a NumPy array
+        pred_np = pred_np.reshape(-1, 3)  # Ensure correct shape
+
+        output_filename = filename.replace('.obj', '_pred.obj')  # Replace .obj with _pred.obj
+        mesh = Mesh(v=pred_np, f=template_mesh.f)  # Use template faces
+        mesh.write_obj(os.path.join(output_dir, output_filename))
 
 output_dir = osp.join(args.data_fp, 'predicted')  # Output directory to save the predictions
 

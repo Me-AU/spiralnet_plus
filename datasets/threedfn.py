@@ -48,6 +48,9 @@ class ThreeDFN(InMemoryDataset):
             file_path = osp.join(self.raw_dir, file)
             data = read_mesh(file_path)
 
+            # Add the filename as an attribute to the Data object
+            data.filename = file
+
             if self.pre_filter is not None and not self.pre_filter(data):
                 continue
             if self.pre_transform is not None:
@@ -58,6 +61,3 @@ class ThreeDFN(InMemoryDataset):
         split_idx = int(0.8 * len(data_list))
         torch.save(self.collate(data_list[:split_idx]), self.processed_paths[0])
         torch.save(self.collate(data_list[split_idx:]), self.processed_paths[1])
-    
-        # # Cleanup raw data after processing
-        # shutil.rmtree(self.raw_dir)
