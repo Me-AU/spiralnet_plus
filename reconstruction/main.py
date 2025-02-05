@@ -35,6 +35,7 @@ parser.add_argument('--lr', type=float, default=3e-4)  # Lower initial LR for st
 parser.add_argument('--lr_decay', type=float, default=0.99)
 parser.add_argument('--decay_step', type=int, default=1)
 parser.add_argument('--weight_decay', type=float, default=1e-4)  # Prevents overfitting in latent space
+parser.add_argument('--beta', type=float, default=1.0)  # Higher beta → more disentanglement
 
 # training hyperparameters
 parser.add_argument('--batch_size', type=int, default=64)
@@ -151,7 +152,7 @@ else:
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=args.decay_step, gamma=args.lr_decay)
 
 run(model, train_loader, test_loader, args.epochs, optimizer, scheduler,
-    writer, device)
+    writer, device, args.beta)
 
 if args.dataset == 'CoMA':
     eval_error(model, test_loader, device, meshdata, args.out_dir)
