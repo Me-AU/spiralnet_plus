@@ -14,10 +14,15 @@ def read_mesh(file_path):
     return data
 
 class ThreeDFN(InMemoryDataset):
-    def __init__(self, root, train=True, transform=None, pre_transform=None, pre_filter=None):
+    def __init__(self, root, train=True, transform=None, pre_transform=None, pre_filter=None, normalize=True):
+        self.normalize = normalize  
         super(ThreeDFN, self).__init__(root, transform, pre_transform, pre_filter)
         path = self.processed_paths[0] if train else self.processed_paths[1]
         self.data, self.slices = torch.load(path)
+        
+        # Store global mean and std after loading processed data
+        self.global_mean = torch.load(osp.join(root, 'global_mean.pt'))
+        self.global_std = torch.load(osp.join(root, 'global_std.pt'))
 
     @property
     def raw_file_names(self):
@@ -29,6 +34,8 @@ class ThreeDFN(InMemoryDataset):
 
     @property
     def mean(self):
+        # After processing, self.data.x is already normalized if normalization was applied.
+        # Here we return the global mean computed from the processed data.
         return self.data.x.mean(dim=0)
 
     @property
@@ -47,16 +54,20 @@ class ThreeDFN(InMemoryDataset):
         for file in obj_files:
             file_path = osp.join(self.raw_dir, file)
             data = read_mesh(file_path)
-
-            # Add the filename as an attribute to the Data object
             data.filename = file
-
-            if self.pre_filter is not None and not self.pre_filter(data):
-                continue
-            if self.pre_transform is not None:
-                data = self.pre_transform(data)
-
             data_list.append(data)
+
+        all_x = torch.cat([data.x for data in data_list], dim=0)
+        global_mean = all_x.mean(dim=0)
+        global_std = all_x.std(dim=0)
+
+        # Save for later retrieval
+        torch.save(global_mean, osp.join(self.root, 'global_mean.pt'))
+        torch.save(global_std, osp.join(self.root, 'global_std.pt'))
+
+        if self.normalize:
+            for data in data_list:
+                data.x = (data.x - global_mean) / global_std
 
         split_idx = int(0.8 * len(data_list))
         torch.save(self.collate(data_list[:split_idx]), self.processed_paths[0])

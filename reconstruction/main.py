@@ -153,8 +153,8 @@ def reverse_preprocessing(data, dataset):
     Reverse normalization using dataset's mean and std
     """
     device = data.device  # Get the device of `data`
-    mean = dataset.mean.to(device)  # Move mean to same device
-    std = dataset.std.to(device)  # Move std to same device
+    mean = dataset.global_mean.to(device)
+    std = dataset.global_std.to(device)
     
     return (data * std) + mean  # Now all tensors are on the same device
 
@@ -180,7 +180,7 @@ def infer_and_save(test_loader, model, device, dataset, output_dir, template_mes
         for data in test_loader:
             data = data.to(device)  # Move data to the correct device
             pred = model(data.x)    # Forward pass to get model predictions
-            # pred = reverse_preprocessing(pred, dataset)  # Reverse preprocessing
+            pred = reverse_preprocessing(pred, dataset)  # Reverse preprocessing
 
             # Loop through each element in the batch and save individual predictions
             for i, filename in enumerate(data.filename):  # data.filename is a list of filenames in the batch
