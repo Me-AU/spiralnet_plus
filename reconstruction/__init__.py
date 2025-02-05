@@ -1,8 +1,8 @@
-from .network import AE
+from .network import AEVAE
 from .train_eval import run, eval_error
 
 __all__ = [
-    'AE',
+    'AEVAE',
     'run',
     'eval_error',
 ]

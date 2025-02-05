@@ -9,7 +9,7 @@ import torch_geometric.transforms as T
 from psbody.mesh import Mesh
 
 
-from reconstruction import AE, run, eval_error
+from reconstruction import AEVAE, run, eval_error
 from utils import utils, writer, DataLoader, mesh_sampling
 
 parser = argparse.ArgumentParser(description='mesh autoencoder')
@@ -18,9 +18,10 @@ parser.add_argument('--dataset', type=str, default='ThreeDFN', choices=['CoMA', 
 parser.add_argument('--split', type=str, default='interpolation')
 parser.add_argument('--test_exp', type=str, default='bareteeth')
 parser.add_argument('--n_threads', type=int, default=4)
-parser.add_argument('--device_idx', type=int, default=-1)
+parser.add_argument('--device_idx', type=int, default=0)
 
 # network hyperparameters
+parser.add_argument('--use_vae', action='store_true')
 parser.add_argument('--out_channels', nargs='+', default=[32, 64, 128, 128], type=int)
 parser.add_argument('--latent_channels', type=int, default=32)  # Larger latent space for better embeddings
 parser.add_argument('--in_channels', type=int, default=3)
@@ -54,7 +55,7 @@ utils.makedirs(args.out_dir)
 utils.makedirs(args.checkpoints_dir)
 
 writer = writer.Writer(args)
-device = torch.device('cuda', args.device_idx)
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 torch.set_num_threads(args.n_threads)
 
 # deterministic
@@ -125,9 +126,9 @@ up_transform_list = [
     for up_transform in tmp['up_transform']
 ]
 
-model = AE(args.in_channels, args.out_channels, args.latent_channels,
+model = AEVAE(args.in_channels, args.out_channels, args.latent_channels,
            spiral_indices_list, down_transform_list,
-           up_transform_list).to(device)
+           up_transform_list, args.use_vae).to(device)
 print('Number of parameters: {}'.format(utils.count_parameters(model)))
 print(model)
 
@@ -188,7 +189,11 @@ def infer_and_save(test_loader, model, device, dataset, output_dir, template_mes
     with torch.no_grad():
         for data in test_loader:
             data = data.to(device)  # Move data to the correct device
-            pred = model(data.x)    # Forward pass to get model predictions
+            out = model(data.x)    # Forward pass to get model predictions 
+            if isinstance(out, tuple) and len(out) == 3:
+                pred, mu, logvar = out  # VAE
+            else:
+                pred = out  # AE
             pred = reverse_preprocessing(pred, dataset)  # Reverse preprocessing
 
             # Loop through each element in the batch and save individual predictions
@@ -230,7 +235,7 @@ def get_latent_embeddings(test_loader, model, device, data_fp):
     with torch.no_grad():
         for data in test_loader:
             data = data.to(device)
-            latent = model.encoder(data.x)  # Extract latent embeddings
+            latent = model.encoder(data.x)  # Extract latent embeddings 
             latent_embeddings.append(latent)
     
     # Convert list to tensor
