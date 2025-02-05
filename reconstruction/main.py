@@ -13,32 +13,30 @@ from reconstruction import AE, run, eval_error
 from utils import utils, writer, DataLoader, mesh_sampling
 
 parser = argparse.ArgumentParser(description='mesh autoencoder')
-parser.add_argument('--exp_name', type=str, default='interpolation_exp')
-parser.add_argument('--dataset', type=str, default='CoMA')
+parser.add_argument('--exp_name', type=str, default='autoencoder_3dfn')
+parser.add_argument('--dataset', type=str, default='ThreeDFN', choices=['CoMA', 'ThreeDFN'])
 parser.add_argument('--split', type=str, default='interpolation')
 parser.add_argument('--test_exp', type=str, default='bareteeth')
 parser.add_argument('--n_threads', type=int, default=4)
-parser.add_argument('--device_idx', type=int, default=0)
+parser.add_argument('--device_idx', type=int, default=-1)
 
 # network hyperparameters
-parser.add_argument('--out_channels',
-                    nargs='+',
-                    default=[32, 32, 32, 64],
-                    type=int)
-parser.add_argument('--latent_channels', type=int, default=16)
+parser.add_argument('--out_channels', nargs='+', default=[32, 64, 128, 128], type=int)
+parser.add_argument('--latent_channels', type=int, default=32)  # Larger latent space for better embeddings
 parser.add_argument('--in_channels', type=int, default=3)
 parser.add_argument('--seq_length', type=int, default=[9, 9, 9, 9], nargs='+')
 parser.add_argument('--dilation', type=int, default=[1, 1, 1, 1], nargs='+')
 
 # optimizer hyperparmeters
-parser.add_argument('--optimizer', type=str, default='Adam')
-parser.add_argument('--lr', type=float, default=1e-3)
+parser.add_argument('--optimizer', type=str, default='adamw', choices=['adamw', 'rmsprop'])
+parser.add_argument('--scheduler', type=str, default='onecycle', choices=['onecycle', 'cosine'])
+parser.add_argument('--lr', type=float, default=3e-4)  # Lower initial LR for stable training
 parser.add_argument('--lr_decay', type=float, default=0.99)
 parser.add_argument('--decay_step', type=int, default=1)
-parser.add_argument('--weight_decay', type=float, default=0)
+parser.add_argument('--weight_decay', type=float, default=1e-4)  # Prevents overfitting in latent space
 
 # training hyperparameters
-parser.add_argument('--batch_size', type=int, default=32)
+parser.add_argument('--batch_size', type=int, default=64)
 parser.add_argument('--epochs', type=int, default=300)
 
 # others
@@ -133,12 +131,23 @@ model = AE(args.in_channels, args.out_channels, args.latent_channels,
 print('Number of parameters: {}'.format(utils.count_parameters(model)))
 print(model)
 
-optimizer = torch.optim.Adam(model.parameters(),
-                             lr=args.lr,
-                             weight_decay=args.weight_decay)
-scheduler = torch.optim.lr_scheduler.StepLR(optimizer,
-                                            args.decay_step,
-                                            gamma=args.lr_decay)
+if args.optimizer.lower() == 'adamw':
+    optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay, betas=(0.9, 0.99))
+elif args.optimizer.lower() == 'sgd':
+    optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, momentum=0.9, weight_decay=args.weight_decay)
+elif args.optimizer.lower() == 'rmsprop':
+    optimizer = torch.optim.RMSprop(model.parameters(), lr=args.lr, weight_decay=args.weight_decay, momentum=0.9)
+else:
+    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+
+if args.scheduler.lower() == 'cosine':
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.epochs)
+elif args.scheduler.lower() == 'plateau':
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=5)
+elif args.scheduler.lower() == 'onecycle':
+    scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, max_lr=args.lr * 10, total_steps=args.epochs * len(train_loader), pct_start=0.3)
+else:
+    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=args.decay_step, gamma=args.lr_decay)
 
 run(model, train_loader, test_loader, args.epochs, optimizer, scheduler,
     writer, device)
