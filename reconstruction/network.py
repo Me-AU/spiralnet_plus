@@ -23,9 +23,9 @@ class SpiralEnblock(nn.Module):
     def reset_parameters(self):
         self.conv.reset_parameters()
 
-    def forward(self, x, down_transform):
+    def forward(self, x, down_transform):  # Expecting down_transform here
         out = F.elu(self.conv(x))
-        out = Pool(out, down_transform)
+        out = Pool(out, down_transform)  # Pass down_transform to Pool
         return out
 
 
@@ -109,12 +109,15 @@ class AEVAE(nn.Module):
 
     def encoder(self, x):
         for i, layer in enumerate(self.en_layers):
-            if i != len(self.en_layers) - 1:
-                x = layer(x, self.down_transform[i])
-            else:
-                x = x.view(-1, layer.weight.size(1))
-                x = layer(x)
+            x = layer(x, self.down_transform[i])
+
+        # After the final convolutional layer, flatten the tensor
+        # Flatten the output for the fully connected layer
+        x = x.view(x.size(0), -1)  # This flattens the output to [batch_size, num_features]
         return x
+
+
+
 
     def decoder(self, x):
         num_layers = len(self.de_layers)
