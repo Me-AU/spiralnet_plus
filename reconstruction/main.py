@@ -227,7 +227,10 @@ def save_predictions(predictions, output_dir, template_mesh_path):
 output_dir = osp.join(args.data_fp, 'predicted')  # Output directory to save the predictions
 
 # Run inference and save predictions
-infer_and_save(test_loader, model, device, test_dataset, output_dir, template_fp)
+if args.dataset == 'CoMA':
+    infer_and_save(test_loader, model, device, meshdata.test_dataset, output_dir, template_fp)
+elif args.dataset == 'ThreeDFN':
+    infer_and_save(test_loader, model, device, test_dataset, output_dir, template_fp)
 
 def get_latent_embeddings(test_loader, model, device, data_fp):
     model.eval()

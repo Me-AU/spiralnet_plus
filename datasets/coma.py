@@ -51,6 +51,10 @@ class CoMA(InMemoryDataset):
         path = self.processed_paths[0] if train else self.processed_paths[1]
         self.data, self.slices = torch.load(path)
 
+        # Load global mean and std
+        self.global_mean = torch.load(osp.join(root, 'global_mean.pt'))
+        self.global_std = torch.load(osp.join(root, 'global_std.pt'))
+
     @property
     def raw_file_names(self):
         return 'COMA_data.zip'
@@ -78,32 +82,48 @@ class CoMA(InMemoryDataset):
             'move it to {}'.format(self.url, self.raw_dir))
 
     def process(self):
-        print('Processing...')
-        fps = glob(osp.join(self.raw_dir, '*/*/*.ply'))
-        if len(fps) == 0:
-            extract_zip(self.raw_paths[0], self.raw_dir, log=False)
-            fps = glob(osp.join(self.raw_dir, '*/*/*.ply'))
+      print('Processing...')
+      fps = glob(osp.join(self.raw_dir, '*/*/*.ply'))
+      if len(fps) == 0:
+          extract_zip(self.raw_paths[0], self.raw_dir, log=False)
+          fps = glob(osp.join(self.raw_dir, '*/*/*.ply'))
 
-        train_data_list, test_data_list = [], []
-        for idx, fp in enumerate(tqdm(fps)):
-            data = read_mesh(fp)
-            if self.pre_transform is not None:
-                data = self.pre_transform(data)
+      train_data_list, test_data_list = [], []
+      all_x = []  # Collect all x values to compute global mean and std
 
-            if self.split == 'interpolation':
-                if (idx % 100) < 10:
-                    test_data_list.append(data)
-                else:
-                    train_data_list.append(data)
-            elif self.split == 'extrapolation':
-                if fp.split('/')[-2] == self.test_exp:
-                    test_data_list.append(data)
-                else:
-                    train_data_list.append(data)
-            else:
-                raise RuntimeError((
-                    'Expected the split of interpolation or extrapolation, but'
-                    ' found {}').format(self.split))
+      for idx, fp in enumerate(tqdm(fps)):
+          data = read_mesh(fp)
+          data.filename = osp.basename(fp)  # Store filename in data
+          all_x.append(data.x)
 
-        torch.save(self.collate(train_data_list), self.processed_paths[0])
-        torch.save(self.collate(test_data_list), self.processed_paths[1])
+          if self.pre_transform is not None:
+              data = self.pre_transform(data)
+
+          if self.split == 'interpolation':
+              if (idx % 100) < 10:
+                  test_data_list.append(data)
+              else:
+                  train_data_list.append(data)
+          elif self.split == 'extrapolation':
+              if fp.split('/')[-2] == self.test_exp:
+                  test_data_list.append(data)
+              else:
+                  train_data_list.append(data)
+          else:
+              raise RuntimeError((  
+                  'Expected the split of interpolation or extrapolation, but'
+                  ' found {}').format(self.split))
+
+      # Compute and store global mean/std
+      all_x = torch.cat(all_x, dim=0)
+      global_mean = all_x.mean(dim=0)
+      global_std = all_x.std(dim=0)
+      torch.save(global_mean, osp.join(self.root, 'global_mean.pt'))
+      torch.save(global_std, osp.join(self.root, 'global_std.pt'))
+
+      # Normalize data
+      for data in train_data_list + test_data_list:
+          data.x = (data.x - global_mean) / global_std
+
+      torch.save(self.collate(train_data_list), self.processed_paths[0])
+      torch.save(self.collate(test_data_list), self.processed_paths[1])

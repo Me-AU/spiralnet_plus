@@ -109,13 +109,14 @@ class AEVAE(nn.Module):
 
     def encoder(self, x):
         for i, layer in enumerate(self.en_layers):
-            x = layer(x, self.down_transform[i])
+            if isinstance(layer, SpiralEnblock):  # SpiralEnblock expects down_transform
+                x = layer(x, self.down_transform[i])
+            else:  # Linear layer
+                x = x.view(x.shape[0], -1)  # Ensure correct flattening
+                x = layer(x) 
 
-        # After the final convolutional layer, flatten the tensor
-        # Flatten the output for the fully connected layer
-        x = x.view(x.size(0), -1)  # This flattens the output to [batch_size, num_features]
+        x = x.view(x.shape[0], -1)
         return x
-
 
 
 

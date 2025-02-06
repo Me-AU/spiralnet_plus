@@ -25,7 +25,7 @@ class ThreeDFN(InMemoryDataset):
         self.global_std = torch.load(osp.join(root, 'global_std.pt'))
 
     @property
-    def raw_file_names(self):
+    def raw_file_names(self):   
         return [f for f in os.listdir(self.raw_dir) if f.endswith('.obj')]
 
     @property
