@@ -7,6 +7,7 @@ import torch
 import torch.backends.cudnn as cudnn
 import torch_geometric.transforms as T
 from psbody.mesh import Mesh
+import openmesh as om
 
 
 from reconstruction import AEVAE, run, eval_error
@@ -169,17 +170,18 @@ def reverse_preprocessing(data, dataset):
     
     return (data * std) + mean  # Now all tensors are on the same device
 
-def infer_and_save(test_loader, model, device, dataset, output_dir, template_mesh_path):
+def infer_and_save(test_loader, model, device, dataset, output_dir, template_mesh_path, dataset_type):
     """
-    Run inference on the test dataset and save predictions as .obj files using input file names.
+    Run inference on the test dataset and save predictions.
 
     Parameters:
     - test_loader (DataLoader): DataLoader for the test set.
     - model (torch.nn.Module): The trained model for inference.
-    - device (torch.device): Device to run the inference on.
+    - device (torch.device): Device to run inference on.
     - dataset (InMemoryDataset): The dataset to reverse the preprocessing (mean and std).
-    - output_dir (str): Directory to save the output mesh files.
-    - template_mesh_path (str): Path to the template mesh to extract faces.
+    - output_dir (str): Directory to save output files.
+    - template_mesh_path (str): Path to the template mesh.
+    - dataset_type (str): Type of dataset ('CoMA' or 'ThreeDFN').
     """
     model.eval()
     predictions = []
@@ -190,47 +192,48 @@ def infer_and_save(test_loader, model, device, dataset, output_dir, template_mes
     with torch.no_grad():
         for data in test_loader:
             data = data.to(device)  # Move data to the correct device
-            out = model(data.x)    # Forward pass to get model predictions 
-            if isinstance(out, tuple) and len(out) == 3:
-                pred, mu, logvar = out  # VAE
-            else:
-                pred = out  # AE
-            pred = reverse_preprocessing(pred, dataset)  # Reverse preprocessing
+            out = model(data.x)    # Forward pass
 
-            # Loop through each element in the batch and save individual predictions
-            for i, filename in enumerate(data.filename):  # data.filename is a list of filenames in the batch
-                pred_single = pred[i]  # Get the prediction for this element in the batch
-                predictions.append((pred_single, filename))  # Save with corresponding filename
+            pred = out if not isinstance(out, tuple) else out[0]  # Handle tuple case
+            if args.dataset == 'ThreeDFN':
+                pred = reverse_preprocessing(pred, dataset)  # Reverse preprocessing
+            for i, filename in enumerate(data.filename):  # Use filename attribute
+                predictions.append((pred[i], filename))  # Store predictions with filenames
     
-    # Save predictions as meshes
-    save_predictions(predictions, output_dir, template_mesh_path)
+    save_predictions(predictions, output_dir, template_mesh_path, dataset_type)
 
-def save_predictions(predictions, output_dir, template_mesh_path):
+def save_predictions(predictions, output_dir, template_mesh_path, dataset_type):
     """
-    Saves the model's predictions as mesh files (.obj) using input file names.
+    Saves the model's predictions as mesh files (.ply or .obj) using input file names.
 
     Parameters:
     - predictions (list of tuples): Each tuple contains (tensor prediction, input filename).
-    - output_dir (str): Directory to save the output .obj files.
+    - output_dir (str): Directory to save the output files.
     - template_mesh_path (str): Path to the template mesh to extract faces.
+    - dataset_type (str): Type of dataset ('CoMA' or 'ThreeDFN').
     """
-    template_mesh = Mesh(filename=template_mesh_path)  # Load template mesh
+    if dataset_type == 'ThreeDFN':
+        template_mesh = Mesh(filename=template_mesh_path)  # Load template mesh for ThreeDFN
 
     for pred, filename in predictions:
-        pred_np = pred.detach().cpu().numpy()  # Ensure it's a NumPy array
+        pred_np = pred.detach().cpu().numpy()  # Convert to NumPy array
         pred_np = pred_np.reshape(-1, 3)  # Ensure correct shape
 
-        output_filename = filename.replace('.obj', '_pred.obj')  # Replace .obj with _pred.obj
-        mesh = Mesh(v=pred_np, f=template_mesh.f)  # Use template faces
-        mesh.write_obj(os.path.join(output_dir, output_filename))
+        if dataset_type == 'CoMA':
+            output_filename = filename.replace('.ply', '_pred.ply')  # Modify filename
+            meshdata.save_mesh(os.path.join(output_dir, output_filename), pred_np)  # Use CoMA's save_mesh
+        else:  # ThreeDFN
+            output_filename = filename.replace('.obj', '_pred.obj')  # Modify filename
+            mesh = Mesh(v=pred_np, f=template_mesh.f)  # Use template faces
+            mesh.write_obj(os.path.join(output_dir, output_filename))
 
 output_dir = osp.join(args.data_fp, 'predicted')  # Output directory to save the predictions
 
 # Run inference and save predictions
 if args.dataset == 'CoMA':
-    infer_and_save(test_loader, model, device, meshdata.test_dataset, output_dir, template_fp)
+    infer_and_save(test_loader, model, device, meshdata.test_dataset, output_dir, template_fp, 'CoMA')
 elif args.dataset == 'ThreeDFN':
-    infer_and_save(test_loader, model, device, test_dataset, output_dir, template_fp)
+    infer_and_save(test_loader, model, device, test_dataset, output_dir, template_fp, 'ThreeDFN')
 
 def get_latent_embeddings(test_loader, model, device, data_fp):
     model.eval()

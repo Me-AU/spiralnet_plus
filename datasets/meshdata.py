@@ -1,5 +1,6 @@
 import openmesh as om
 from datasets import CoMA
+import torch
 
 
 class MeshData(object):
@@ -64,5 +65,6 @@ class MeshData(object):
         print('Done!')
 
     def save_mesh(self, fp, x):
-        x = x * self.std + self.mean
-        om.write_mesh(fp, om.TriMesh(x.numpy(), self.template_face))
+        x = torch.tensor(x) * self.std + self.mean  # Convert x to tensor
+        x = x.cpu().numpy()  # Convert back to NumPy before saving
+        om.write_mesh(fp, om.TriMesh(x, self.template_face))

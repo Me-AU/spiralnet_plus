@@ -121,9 +121,9 @@ class CoMA(InMemoryDataset):
       torch.save(global_mean, osp.join(self.root, 'global_mean.pt'))
       torch.save(global_std, osp.join(self.root, 'global_std.pt'))
 
-      # Normalize data
-      for data in train_data_list + test_data_list:
-          data.x = (data.x - global_mean) / global_std
+      # # Normalize data
+      # for data in train_data_list + test_data_list:
+      #     data.x = (data.x - global_mean) / global_std
 
       torch.save(self.collate(train_data_list), self.processed_paths[0])
       torch.save(self.collate(test_data_list), self.processed_paths[1])
