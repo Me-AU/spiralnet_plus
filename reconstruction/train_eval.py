@@ -4,7 +4,7 @@ import torch
 import torch.nn.functional as F
 
 
-def run(model, train_loader, test_loader, epochs, optimizer, scheduler, writer, device, beta=1.0):
+def run(model, train_loader, test_loader, epochs, optimizer, scheduler, writer, device, args, start_epoch, beta=1.0):
     train_losses, test_losses = [], []
 
     for epoch in range(1, epochs + 1):
@@ -22,7 +22,7 @@ def run(model, train_loader, test_loader, epochs, optimizer, scheduler, writer, 
         }
 
         writer.print_info(info)
-        writer.save_checkpoint(model, optimizer, scheduler, epoch)
+        writer.save_checkpoint(model, optimizer, scheduler, epoch, start_epoch, args)
 
 
 def train(model, optimizer, loader, device, beta=1.0):

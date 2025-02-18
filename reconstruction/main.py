@@ -31,7 +31,7 @@ parser.add_argument('--dilation', type=int, default=[1, 1, 1, 1], nargs='+')
 
 # optimizer hyperparmeters
 parser.add_argument('--optimizer', type=str, default='adamw', choices=['adamw', 'rmsprop'])
-parser.add_argument('--scheduler', type=str, default='onecycle', choices=['onecycle', 'cosine'])
+parser.add_argument('--scheduler', type=str, default='cosine', choices=['onecycle', 'cosine'])
 parser.add_argument('--lr', type=float, default=3e-4)  # Lower initial LR for stable training
 parser.add_argument('--lr_decay', type=float, default=0.99)
 parser.add_argument('--decay_step', type=int, default=1)
@@ -44,6 +44,8 @@ parser.add_argument('--epochs', type=int, default=300)
 
 # others
 parser.add_argument('--seed', type=int, default=1)
+parser.add_argument('--checkpoint', type=str, default=None, help='Path to checkpoint file to resume training or evaluate')
+parser.add_argument('--resume', action='store_true', help='Resume training from the checkpoint')
 
 args = parser.parse_args()
 
@@ -152,8 +154,29 @@ elif args.scheduler.lower() == 'onecycle':
 else:
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=args.decay_step, gamma=args.lr_decay)
 
-run(model, train_loader, test_loader, args.epochs, optimizer, scheduler,
-    writer, device, args.beta)
+# Load checkpoint if provided
+start_epoch = 0
+if args.checkpoint is not None:
+  if osp.isfile(args.checkpoint):
+      print(f"Loading checkpoint from {args.checkpoint}")
+      checkpoint = torch.load(args.checkpoint, map_location=device)
+      model.load_state_dict(checkpoint['model_state_dict'])
+      if args.resume:
+          optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+          scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
+          start_epoch = checkpoint.get('epoch', 0)
+          print(f"Resuming training from epoch {start_epoch}")
+  else:
+      print("Faulty checkpoint path")
+
+# Determine if training should proceed
+if args.resume or args.checkpoint is None:
+    remaining_epochs = args.epochs - start_epoch
+    if remaining_epochs > 0:
+        run(model, train_loader, test_loader, remaining_epochs, optimizer, scheduler,
+            writer, device, args, start_epoch, args.beta)
+    else:
+        print("Training already completed. Skipping training phase.")
 
 if args.dataset == 'CoMA':
     eval_error(model, test_loader, device, meshdata, args.out_dir)

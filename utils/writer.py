@@ -26,13 +26,14 @@ class Writer:
             log_file.write('{:s}\n'.format(message))
         print(message)
 
-    def save_checkpoint(self, model, optimizer, scheduler, epoch):
+    def save_checkpoint(self, model, optimizer, scheduler, epoch, start_epoch, args):
         torch.save(
             {
-                'epoch': epoch,
+                'epoch': epoch + start_epoch,
                 'model_state_dict': model.state_dict(),
                 'optimizer_state_dict': optimizer.state_dict(),
                 'scheduler_state_dict': scheduler.state_dict(),
+                'args': args
             },
             os.path.join(self.args.checkpoints_dir,
-                         'checkpoint_{:03d}.pt'.format(epoch)))
+                         'checkpoint_{:03d}.pt'.format(epoch + start_epoch)))
