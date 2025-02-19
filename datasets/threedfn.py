@@ -18,7 +18,7 @@ class ThreeDFN(InMemoryDataset):
         self.normalize = normalize  
         super(ThreeDFN, self).__init__(root, transform, pre_transform, pre_filter)
         path = self.processed_paths[0] if train else self.processed_paths[1]
-        self.data, self.slices = torch.load(path)
+        self.data, self.slices = torch.load(path, weights_only=False)
         
         # Store global mean and std after loading processed data
         self.global_mean = torch.load(osp.join(root, 'global_mean.pt'))

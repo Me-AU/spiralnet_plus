@@ -15,7 +15,7 @@ from utils import utils, writer, DataLoader, mesh_sampling
 
 parser = argparse.ArgumentParser(description='mesh autoencoder')
 parser.add_argument('--exp_name', type=str, default='autoencoder_3dfn')
-parser.add_argument('--dataset', type=str, default='ThreeDFN', choices=['CoMA', 'ThreeDFN'])
+parser.add_argument('--dataset', type=str, default='ThreeDFN', choices=['CoMA', 'foundation', 'ThreeDFN'])
 parser.add_argument('--split', type=str, default='interpolation')
 parser.add_argument('--test_exp', type=str, default='bareteeth')
 parser.add_argument('--n_threads', type=int, default=4)
@@ -84,6 +84,16 @@ if args.dataset == 'CoMA':
 elif args.dataset == 'ThreeDFN':
     from datasets import ThreeDFN
     # Load 3DFN dataset (automatically loads train/test split)
+    train_dataset = ThreeDFN(root=args.data_fp, train=True, transform=T.NormalizeScale())
+    test_dataset = ThreeDFN(root=args.data_fp, train=False, transform=T.NormalizeScale())
+
+    # Create DataLoaders
+    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
+    test_loader = DataLoader(test_dataset, batch_size=args.batch_size)
+
+elif args.dataset == 'foundation':
+    from datasets import ThreeDFN
+    # Load foundation dataset (automatically loads train/test split)
     train_dataset = ThreeDFN(root=args.data_fp, train=True, transform=T.NormalizeScale())
     test_dataset = ThreeDFN(root=args.data_fp, train=False, transform=T.NormalizeScale())
 
@@ -180,7 +190,7 @@ if args.resume or args.checkpoint is None:
 
 if args.dataset == 'CoMA':
     eval_error(model, test_loader, device, meshdata, args.out_dir)
-elif args.dataset == 'ThreeDFN':
+elif args.dataset == 'ThreeDFN' or args.dataset == 'foundation':
     eval_error(model, test_loader, device, test_dataset, args.out_dir)
 
 def reverse_preprocessing(data, dataset):
@@ -218,7 +228,7 @@ def infer_and_save(test_loader, model, device, dataset, output_dir, template_mes
             out = model(data.x)    # Forward pass
 
             pred = out if not isinstance(out, tuple) else out[0]  # Handle tuple case
-            if args.dataset == 'ThreeDFN':
+            if args.dataset == 'ThreeDFN' or args.dataset == 'foundation':
                 pred = reverse_preprocessing(pred, dataset)  # Reverse preprocessing
             for i, filename in enumerate(data.filename):  # Use filename attribute
                 predictions.append((pred[i], filename))  # Store predictions with filenames
@@ -235,7 +245,7 @@ def save_predictions(predictions, output_dir, template_mesh_path, dataset_type):
     - template_mesh_path (str): Path to the template mesh to extract faces.
     - dataset_type (str): Type of dataset ('CoMA' or 'ThreeDFN').
     """
-    if dataset_type == 'ThreeDFN':
+    if dataset_type == 'ThreeDFN' or dataset_type == 'foundation':
         template_mesh = Mesh(filename=template_mesh_path)  # Load template mesh for ThreeDFN
 
     for pred, filename in predictions:
@@ -257,6 +267,8 @@ if args.dataset == 'CoMA':
     infer_and_save(test_loader, model, device, meshdata.test_dataset, output_dir, template_fp, 'CoMA')
 elif args.dataset == 'ThreeDFN':
     infer_and_save(test_loader, model, device, test_dataset, output_dir, template_fp, 'ThreeDFN')
+elif args.dataset == 'foundation':
+    infer_and_save(test_loader, model, device, test_dataset, output_dir, template_fp, 'foundation')
 
 def get_latent_embeddings(test_loader, model, device, data_fp):
     model.eval()
