@@ -169,7 +169,8 @@ start_epoch = 0
 if args.checkpoint is not None:
   if osp.isfile(args.checkpoint):
       print(f"Loading checkpoint from {args.checkpoint}")
-      checkpoint = torch.load(args.checkpoint, map_location=device)
+      checkpoint = torch.load(args.checkpoint, map_location=device, weights_only=False)
+      print(f"Loading model state dict from checkpoint")
       model.load_state_dict(checkpoint['model_state_dict'])
       if args.resume:
           optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
@@ -177,7 +178,7 @@ if args.checkpoint is not None:
           start_epoch = checkpoint.get('epoch', 0)
           print(f"Resuming training from epoch {start_epoch}")
   else:
-      print("Faulty checkpoint path")
+      print("Faulty checkpoint path, args.checkpoint is: ", args.checkpoint)
 
 # Determine if training should proceed
 if args.resume or args.checkpoint is None:
@@ -270,22 +271,46 @@ elif args.dataset == 'ThreeDFN':
 elif args.dataset == 'foundation':
     infer_and_save(test_loader, model, device, test_dataset, output_dir, template_fp, 'foundation')
 
-def get_latent_embeddings(test_loader, model, device, data_fp):
+def get_latent_embeddings(test_loader, model, device, data_fp, prefix):
     model.eval()
-    path = osp.join(data_fp, 'latent_embeddings.pt')
+    path = osp.join(data_fp, f'{prefix}_latent_embeddings.pt')
     latent_embeddings = []
+    filenames = []  # Collect filenames corresponding to each latent embedding
     with torch.no_grad():
         for data in test_loader:
             data = data.to(device)
             latent = model.encoder(data.x)  # Extract latent embeddings 
             latent_embeddings.append(latent)
-    
+            filenames.extend(data.filename)  # Collect the filenames
+
     # Convert list to tensor
     latent_embeddings = torch.cat(latent_embeddings, dim=0)
     
-    # Save the embeddings to a file
-    torch.save(latent_embeddings, path)
+    # Save the embeddings and filenames together
+    torch.save({
+        'embeddings': latent_embeddings,
+        'filenames': filenames
+    }, path)
 
-    return latent_embeddings
+    return latent_embeddings, filenames
 
-latent_embeddings = get_latent_embeddings(test_loader, model, device, args.data_fp)
+from sklearn.manifold import TSNE
+import matplotlib.pyplot as plt
+
+latent_embeddings, f = get_latent_embeddings(test_loader, model, device, args.data_fp, "test")
+
+tsne = TSNE(n_components=2)
+latent_2d = tsne.fit_transform(latent_embeddings.cpu().numpy())
+
+plt.scatter(latent_2d[:, 0], latent_2d[:, 1])
+plt.title('t-SNE visualization of latent space')
+plt.show()
+
+latent_embeddings, f = get_latent_embeddings(test_loader, model, device, args.data_fp, "train")
+
+tsne = TSNE(n_components=2)
+latent_2d = tsne.fit_transform(latent_embeddings.cpu().numpy())
+
+plt.scatter(latent_2d[:, 0], latent_2d[:, 1])
+plt.title('t-SNE visualization of latent space')
+plt.show()
