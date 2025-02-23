@@ -46,6 +46,7 @@ parser.add_argument('--epochs', type=int, default=300)
 parser.add_argument('--seed', type=int, default=1)
 parser.add_argument('--checkpoint', type=str, default=None, help='Path to checkpoint file to resume training or evaluate')
 parser.add_argument('--resume', action='store_true', help='Resume training from the checkpoint')
+parser.add_argument('--embdecode', type=str, default=None, help='Path to latent embeddings to decode')
 
 args = parser.parse_args()
 
@@ -280,11 +281,14 @@ def get_latent_embeddings(test_loader, model, device, data_fp, prefix):
         for data in test_loader:
             data = data.to(device)
             latent = model.encoder(data.x)  # Extract latent embeddings 
+            if args.use_vae:    
+                latent = model.fc_mu(latent)  # Project to latent space (128D)
             latent_embeddings.append(latent)
             filenames.extend(data.filename)  # Collect the filenames
 
     # Convert list to tensor
     latent_embeddings = torch.cat(latent_embeddings, dim=0)
+    print(f'Latent {prefix} embeddings shape: {latent_embeddings.shape}')
     
     # Save the embeddings and filenames together
     torch.save({
@@ -294,23 +298,62 @@ def get_latent_embeddings(test_loader, model, device, data_fp, prefix):
 
     return latent_embeddings, filenames
 
+latent_embeddings, f = get_latent_embeddings(train_loader, model, device, args.data_fp, "train")
+latent_embeddings, f = get_latent_embeddings(test_loader, model, device, args.data_fp, "test")
+
 from sklearn.manifold import TSNE
 import matplotlib.pyplot as plt
 
-latent_embeddings, f = get_latent_embeddings(test_loader, model, device, args.data_fp, "test")
+# tsne = TSNE(n_components=2)
+# latent_2d = tsne.fit_transform(latent_embeddings.cpu().numpy())
 
-tsne = TSNE(n_components=2)
-latent_2d = tsne.fit_transform(latent_embeddings.cpu().numpy())
+# plt.scatter(latent_2d[:, 0], latent_2d[:, 1])
+# plt.title('t-SNE visualization of latent space')
+# plt.show()
 
-plt.scatter(latent_2d[:, 0], latent_2d[:, 1])
-plt.title('t-SNE visualization of latent space')
-plt.show()
+# latent_embeddings, f = get_latent_embeddings(test_loader, model, device, args.data_fp, "train")
 
-latent_embeddings, f = get_latent_embeddings(test_loader, model, device, args.data_fp, "train")
+# tsne = TSNE(n_components=2)
+# latent_2d = tsne.fit_transform(latent_embeddings.cpu().numpy())
 
-tsne = TSNE(n_components=2)
-latent_2d = tsne.fit_transform(latent_embeddings.cpu().numpy())
+# plt.scatter(latent_2d[:, 0], latent_2d[:, 1])
+# plt.title('t-SNE visualization of latent space')
+# plt.show()
 
-plt.scatter(latent_2d[:, 0], latent_2d[:, 1])
-plt.title('t-SNE visualization of latent space')
-plt.show()
+def infer_from_latents_and_save(latent_embeddings, filenames, model, device, output_dir, template_mesh_path, dataset_type):
+    """
+    Decode latent embeddings and save predictions as mesh files.
+
+    Parameters:
+    - latent_embeddings (Tensor): Latent embeddings to decode.
+    - filenames (list of str): Corresponding filenames.
+    - model (torch.nn.Module): The trained model with a decoder.
+    - device (torch.device): Device to run inference on.
+    - output_dir (str): Directory to save output files.
+    - template_mesh_path (str): Path to the template mesh.
+    - dataset_type (str): Type of dataset ('CoMA' or 'ThreeDFN').
+    """
+    model.eval()
+    os.makedirs(output_dir, exist_ok=True)
+    
+    predictions = []
+    
+    with torch.no_grad():
+        latent_embeddings = latent_embeddings.to(device)  # Move embeddings to device
+        decoded_outputs = model.decoder(latent_embeddings)  # Decode embeddings
+        
+        for i, filename in enumerate(filenames):
+            pred = decoded_outputs[i]
+            predictions.append((pred, filename))  # Store decoded output with filename
+    
+    save_predictions(predictions, output_dir, template_mesh_path, dataset_type)
+
+# Load the saved latent embeddings
+
+embeddings_path = args.embdecode
+data = torch.load(embeddings_path)
+latent_embeddings = data['embeddings']
+filenames = data['filenames']
+
+# # Run inference and save results
+infer_from_latents_and_save(latent_embeddings, filenames, model, device, output_dir, template_fp, args.dataset)
