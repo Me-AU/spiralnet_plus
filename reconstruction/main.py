@@ -320,7 +320,7 @@ import matplotlib.pyplot as plt
 # plt.title('t-SNE visualization of latent space')
 # plt.show()
 
-def infer_from_latents_and_save(latent_embeddings, filenames, model, device, output_dir, template_mesh_path, dataset_type):
+def infer_from_latents_and_save(latent_embeddings, filenames, model, device, output_dir, template_mesh_path, dataset, dataset_type):
     """
     Decode latent embeddings and save predictions as mesh files.
 
@@ -341,7 +341,8 @@ def infer_from_latents_and_save(latent_embeddings, filenames, model, device, out
     with torch.no_grad():
         latent_embeddings = latent_embeddings.to(device)  # Move embeddings to device
         decoded_outputs = model.decoder(latent_embeddings)  # Decode embeddings
-        
+        if args.dataset == 'ThreeDFN' or args.dataset == 'foundation':
+            decoded_outputs = reverse_preprocessing(decoded_outputs, dataset)  # Reverse preprocessing
         for i, filename in enumerate(filenames):
             pred = decoded_outputs[i]
             predictions.append((pred, filename))  # Store decoded output with filename
@@ -356,4 +357,4 @@ latent_embeddings = data['embeddings']
 filenames = data['filenames']
 
 # # Run inference and save results
-infer_from_latents_and_save(latent_embeddings, filenames, model, device, output_dir, template_fp, args.dataset)
+infer_from_latents_and_save(latent_embeddings, filenames, model, device, output_dir, template_fp, test_dataset, args.dataset)
