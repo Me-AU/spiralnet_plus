@@ -87,8 +87,8 @@ def eval_error(model, test_loader, device, meshdata, out_dir):
             if isinstance(pred, tuple):  # Handle VAE output
                 pred = pred[0]  # Only take the reconstruction
             num_graphs = data.num_graphs
-            reshaped_pred = (pred.view(num_graphs, -1, 3).cpu() * std) + mean
-            reshaped_x = (x.view(num_graphs, -1, 3).cpu() * std) + mean
+            reshaped_pred = (pred.view(num_graphs, -1, 3).to(device) * std) + mean
+            reshaped_x = (x.view(num_graphs, -1, 3).to(device) * std) + mean
 
             reshaped_pred *= 1000
             reshaped_x *= 1000
